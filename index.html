@@ -105,9 +105,7 @@ ng-class="{'bg-red-500': alerta.tipo=='error','bg-green-500': alerta.tipo=='succ
 <label class="font-semibold">Modalidad del Curso</label>
 <select ng-model="form.MODALIDAD" ng-change="cambiarModalidad()" class="w-full border rounded p-2">
 <option value="">Seleccionar</option>
-<option>Presencial</option>
-<option>Virtual</option>
-<option>Mixto</option>
+<option ng-repeat="m in modalidadesDisponibles">{{m}}</option>
 </select>
 </div>
 
@@ -328,97 +326,111 @@ $scope.mostrarAlerta("Solo se permiten máximo 2 horarios","error");
 
 };
 
-$scope.registrar=function(){
+$scope.registrar = function() {
+    // Validaciones básicas
+    if(!$scope.form.CLAVE || !$scope.form.PROGRAMA || !$scope.form.MODALIDAD){
+        $scope.mostrarAlerta("Complete los campos obligatorios", "error");
+        return;
+    }
 
-if(!$scope.form.CLAVE||!$scope.form.PROGRAMA||!$scope.form.MODALIDAD){
-$scope.mostrarAlerta("Complete los campos obligatorios","error");
-return;
-}
+    let crnsSeleccionados = Object.keys($scope.form.CRNS).filter(k => $scope.form.CRNS[k]);
+    if(crnsSeleccionados.length === 0){
+        $scope.mostrarAlerta("Debe seleccionar al menos un CRN", "error");
+        return;
+    }
 
-let crnsSeleccionados=Object.keys($scope.form.CRNS).filter(k=>$scope.form.CRNS[k]);
+    if(crnsSeleccionados.length != $scope.form.SECCIONES){
+        $scope.mostrarAlerta("La cantidad de CRN seleccionados debe ser igual a la Cantidad de Secciones", "error");
+        return;
+    }
 
-if(crnsSeleccionados.length==0){
-$scope.mostrarAlerta("Debe seleccionar al menos un CRN","error");
-return;
-}
+    if($scope.form.MODALIDAD != "Virtual"){
+        let dias = Object.keys($scope.form.DIAS).filter(k => $scope.form.DIAS[k]);
+        let horarios = Object.keys($scope.form.HORARIOS).filter(k => $scope.form.HORARIOS[k]);
+        if(dias.length === 0 || horarios.length === 0){
+            $scope.mostrarAlerta("Debe seleccionar días y horarios", "error");
+            return;
+        }
+    }
 
-/* VALIDACIÓN NUEVA */
+    // Generar registros en el arreglo local
+    crnsSeleccionados.forEach((crn, index) => {
+        let identificador = (index + 1) + "-" + $scope.form.PROGRAMA;
 
-if(crnsSeleccionados.length != $scope.form.SECCIONES){
-$scope.mostrarAlerta("La cantidad de CRN seleccionados debe ser igual a la Cantidad de Secciones","error");
-return;
-}
+        let registroBase = {
+            IDENTIFICADOR: identificador,
+            CRN: crn,
+            CLAVE: $scope.form.CLAVE,
+            MATERIA: $scope.form.MATERIA,
+            DEPARTAMENTO: $scope.form.DEPARTAMENTO,
+            CARGA: $scope.form.CARGA,
+            PROGRAMA: $scope.form.PROGRAMA,
+            SEMESTRE: $scope.form.SEMESTRE,
+            CUPOS: $scope.form.CUPOS,
+            MODALIDAD: $scope.form.MODALIDAD,
+            FECHA_REGISTRO: new Date().toLocaleString()
+        };
 
-/* VALIDACIÓN DÍAS Y HORARIOS */
+        if($scope.form.MODALIDAD === "Virtual"){
+            registroBase.CATEGORIA = "Teoría";
+            registroBase.DIAS = "-";
+            registroBase.HORARIOS = "-";
+            registroBase.LAB_DIAS = "-";
+            registroBase.TIPO_LABORATORIO = "-";
+            registroBase.COMENTARIOS = "-";
+            $scope.registros.push(registroBase);
+        } else {
+            registroBase.DIAS = JSON.parse(JSON.stringify($scope.form.DIAS));
+            registroBase.HORARIOS = JSON.parse(JSON.stringify($scope.form.HORARIOS));
+            registroBase.TIPO_LABORATORIO = $scope.form.TIPO_LABORATORIO || "-";
+            registroBase.COMENTARIOS = $scope.form.COMENTARIOS || "-";
 
-if($scope.form.MODALIDAD!="Virtual"){
+            let teoria = JSON.parse(JSON.stringify(registroBase));
+            teoria.CATEGORIA = "Teoría";
+            $scope.registros.push(teoria);
 
-let dias=Object.keys($scope.form.DIAS).filter(k=>$scope.form.DIAS[k]);
-let horarios=Object.keys($scope.form.HORARIOS).filter(k=>$scope.form.HORARIOS[k]);
+            let practica = JSON.parse(JSON.stringify(registroBase));
+            practica.CATEGORIA = "Práctica";
+            $scope.registros.push(practica);
+        }
+    });
 
-if(dias.length==0 || horarios.length==0){
-$scope.mostrarAlerta("Debe seleccionar días y horarios","error");
-return;
-}
+    $scope.mostrarAlerta("Registros agregados correctamente", "success");
+    $scope.cancelar(); // Limpiar formulario
 
-}
+    // Llamar al método que envía los registros a Google Sheets
+    $scope.enviarASheets();
+};
 
-/* GENERACIÓN DE REGISTROS */
+$scope.enviarASheets = function() {
+    // Prepara los registros para enviar
+    let datosParaEnviar = $scope.registros.map(r => ({
+        ...r,
+        DIAS: Object.keys(r.DIAS || {}).filter(d => r.DIAS[d]),
+        HORARIOS: Object.keys(r.HORARIOS || {}).filter(h => r.HORARIOS[h])
+    }));
 
-crnsSeleccionados.forEach((crn,index)=>{
+    const urlSheets = "https://script.google.com/macros/s/AKfycbyPkgPXNt3QrZxcQn6MXsc32AA6-fmsC4pDLs4bhl-TYftsxuOy14xaW56Z1Ksnnj-l/exec"; // Reemplaza con la URL de tu Web App
 
-let identificador=(index+1)+"-"+$scope.form.PROGRAMA;
-
-/* MODALIDAD VIRTUAL */
-
-if($scope.form.MODALIDAD=="Virtual"){
-
-let registro=angular.copy($scope.form);
-
-registro.CRN=crn;
-registro.IDENTIFICADOR=identificador;
-registro.CATEGORIA="Teoría";
-
-delete registro.LAB_DIAS;
-delete registro.TIPO_LABORATORIO;
-delete registro.COMENTARIOS;
-
-$scope.registros.push(registro);
-
-}
-
-/* MODALIDAD PRESENCIAL O MIXTA */
-
-else{
-
-/* REGISTRO TEORÍA */
-
-let teoria=angular.copy($scope.form);
-
-teoria.CRN=crn;
-teoria.IDENTIFICADOR=identificador;
-teoria.CATEGORIA="Teoría";
-
-$scope.registros.push(teoria);
-
-/* REGISTRO PRÁCTICA */
-
-let practica=angular.copy($scope.form);
-
-practica.CRN=crn;
-practica.IDENTIFICADOR=identificador;
-practica.CATEGORIA="Práctica";
-
-$scope.registros.push(practica);
-
-}
-
-});
-
-$scope.mostrarAlerta("Registros agregados correctamente","success");
-
-$scope.cancelar();
-
+    fetch(urlSheets, {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(datosParaEnviar)
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log("Respuesta de Google Sheets:", data);
+        if(data.status === "success") {
+            $scope.mostrarAlerta("Datos enviados a Google Sheets correctamente", "success");
+        } else {
+            $scope.mostrarAlerta("Error al enviar: " + (data.message || ""), "error");
+        }
+    })
+    .catch(err => {
+        console.error("Error de conexión con Sheets:", err);
+        $scope.mostrarAlerta("No se pudo conectar con Google Sheets", "error");
+    });
 };
 
 $scope.cancelar=function(){
@@ -435,30 +447,32 @@ $scope.mostrarAlerta("Tabla limpiada","success");
 
 };
 
-$scope.exportarExcel=function(){
+$scope.exportarExcel = function() {
 
-let datos=$scope.registros.map(r=>({
+    let datos = $scope.registros.map(r => ({
+        Identificador: r.IDENTIFICADOR,
+        CRN: r.CRN,
+        Clave: r.CLAVE,
+        Materia: r.MATERIA,
+        Departamento: r.DEPARTAMENTO,
+        Carga: r.CARGA,
+        Programa: r.PROGRAMA,
+        Semestre: r.SEMESTRE,
+        Cupos: r.CUPOS,
+        Modalidad: r.MODALIDAD,
+        Categoria: r.CATEGORIA,
+        Dias: Object.keys(r.DIAS).filter(d => r.DIAS[d]).join(", "),
+        Horarios: Object.keys(r.HORARIOS).filter(h => r.HORARIOS[h]).join(", "),
+        Tipo_Laboratorio: r.TIPO_LABORATORIO || "",
+        Comentarios: r.COMENTARIOS || "",
+        Fecha_Registro: r.FECHA_REGISTRO || ""
+    }));
 
-Identificador:r.IDENTIFICADOR,
-CRN:r.CRN,
-Clave:r.CLAVE,
-Materia:r.MATERIA,
-Programa:r.PROGRAMA,
-Semestre:r.SEMESTRE,
-Cupos:r.CUPOS,
-Modalidad:r.MODALIDAD,
-Categoria:r.CATEGORIA
+    let ws = XLSX.utils.json_to_sheet(datos);
+    let wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Secciones");
 
-}));
-
-let ws=XLSX.utils.json_to_sheet(datos);
-
-let wb=XLSX.utils.book_new();
-
-XLSX.utils.book_append_sheet(wb,ws,"Secciones");
-
-XLSX.writeFile(wb,"plantilla_secciones_2026B.xlsx");
-
+    XLSX.writeFile(wb, "plantilla_secciones_2026B.xlsx");
 };
 
 $scope.mostrarAlerta=function(mensaje,tipo){
@@ -476,15 +490,39 @@ $scope.$apply();
 
 $scope.verificarProgramaVirtual=function(){
 
-const programasVirtuales = [
+const programasVirtuales=[
 "LAO","LBGC","LDE","LGC","LCDP","LPD","LSC"
 ];
 
+const programasNoVirtuales=[
+"LC","LCD","LIACD","LIFN","LTB"
+];
+
+/* PROGRAMAS 100% VIRTUALES */
+
 if(programasVirtuales.includes($scope.form.PROGRAMA)){
+
+$scope.modalidadesDisponibles=["Virtual"];
 
 $scope.form.MODALIDAD="Virtual";
 
-}else{
+}
+
+/* PROGRAMAS PRESENCIALES / MIXTOS */
+
+else if(programasNoVirtuales.includes($scope.form.PROGRAMA)){
+
+$scope.modalidadesDisponibles=["Presencial","Mixto"];
+
+$scope.form.MODALIDAD="";
+
+}
+
+/* CASO GENERAL */
+
+else{
+
+$scope.modalidadesDisponibles=["Presencial","Virtual","Mixto"];
 
 $scope.form.MODALIDAD="";
 
@@ -492,7 +530,10 @@ $scope.form.MODALIDAD="";
 
 $scope.cambiarModalidad();
 
-}
+};
+
+
+$scope.modalidadesDisponibles=["Presencial","Virtual","Mixto"];
 
 });
 
