@@ -399,7 +399,39 @@ $scope.registrar = function() {
     $scope.cancelar(); // Limpiar formulario
 
     // Llamar al método que envía los registros a Google Sheets
-    $scope.enviarASheets();
+    $scope.enviarASheetsForm();
+};
+
+$scope.enviarASheetsForm = function() {
+    // Prepara los datos para enviar
+    let datosParaEnviar = $scope.registros.map(r => ({
+        ...r,
+        DIAS: Object.keys(r.DIAS || {}).filter(d => r.DIAS[d]),
+        HORARIOS: Object.keys(r.HORARIOS || {}).filter(h => r.HORARIOS[h])
+    }));
+
+    // Convertimos todo a JSON string
+    let jsonData = JSON.stringify(datosParaEnviar);
+
+    // Creamos un formulario invisible
+    let form = document.createElement("form");
+    form.method = "POST";
+    form.action = "https://script.google.com/macros/s/AKfycbylQFlxg16OIzWpfkb_gDCa6wqL9sunEOsAuq-I2-BZ_m88NT9Wved7ZhWJvyggv-N4kA/exec"; // reemplaza por tu URL de Google Apps Script
+    form.target = "_blank"; // opcional: abrir en nueva pestaña
+
+    // Input hidden con los datos
+    let input = document.createElement("input");
+    input.type = "hidden";
+    input.name = "data"; // Google Apps Script recibirá e.parameter.data
+    input.value = jsonData;
+    form.appendChild(input);
+
+    // Agregamos el formulario al body y lo enviamos
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+
+    $scope.mostrarAlerta("Formulario enviado a Google Sheets", "success");
 };
 
 $scope.enviarASheets = function() {
