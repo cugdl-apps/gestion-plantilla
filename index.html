@@ -409,60 +409,27 @@ $scope.enviarASheetsForm = function() {
         DIAS: Object.keys(r.DIAS || {}).filter(d => r.DIAS[d]),
         HORARIOS: Object.keys(r.HORARIOS || {}).filter(h => r.HORARIOS[h])
     }));
-
     // Convertimos todo a JSON string
     let jsonData = JSON.stringify(datosParaEnviar);
-
     // Creamos un formulario invisible
     let form = document.createElement("form");
     form.method = "POST";
-    form.action = "https://script.google.com/macros/s/AKfycbylQFlxg16OIzWpfkb_gDCa6wqL9sunEOsAuq-I2-BZ_m88NT9Wved7ZhWJvyggv-N4kA/exec"; // reemplaza por tu URL de Google Apps Script
-    form.target = "_blank"; // opcional: abrir en nueva pestaña
+    form.action = "https://script.google.com/macros/s/AKfycbylQFlxg16OIzWpfkb_gDCa6wqL9sunEOsAuq-I2-BZ_m88NT9Wved7ZhWJvyggv-N4kA/exec";
+    form.target = "hiddenFrame"; // importante
+    // form.target = "_blank"; // opcional: abrir en nueva pestaña PARA PRUEBAS
 
     // Input hidden con los datos
     let input = document.createElement("input");
     input.type = "hidden";
-    input.name = "data"; // Google Apps Script recibirá e.parameter.data
+    input.name = "data";
     input.value = jsonData;
+
     form.appendChild(input);
-
-    // Agregamos el formulario al body y lo enviamos
     document.body.appendChild(form);
+
     form.submit();
+
     document.body.removeChild(form);
-
-    $scope.mostrarAlerta("Formulario enviado a Google Sheets", "success");
-};
-
-$scope.enviarASheets = function() {
-    // Prepara los registros para enviar
-    let datosParaEnviar = $scope.registros.map(r => ({
-        ...r,
-        DIAS: Object.keys(r.DIAS || {}).filter(d => r.DIAS[d]),
-        HORARIOS: Object.keys(r.HORARIOS || {}).filter(h => r.HORARIOS[h])
-    }));
-
-    const urlSheets = "https://script.google.com/macros/s/AKfycbyPkgPXNt3QrZxcQn6MXsc32AA6-fmsC4pDLs4bhl-TYftsxuOy14xaW56Z1Ksnnj-l/exec"; // Reemplaza con la URL de tu Web App
-
-    fetch(urlSheets, {
-        method: "POST",
-        mode: "cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(datosParaEnviar)
-    })
-    .then(response => response.json())
-    .then(data => {
-        console.log("Respuesta de Google Sheets:", data);
-        if(data.status === "success") {
-            $scope.mostrarAlerta("Datos enviados a Google Sheets correctamente", "success");
-        } else {
-            $scope.mostrarAlerta("Error al enviar: " + (data.message || ""), "error");
-        }
-    })
-    .catch(err => {
-        console.error("Error de conexión con Sheets:", err);
-        $scope.mostrarAlerta("No se pudo conectar con Google Sheets", "error");
-    });
 };
 
 $scope.cancelar=function(){
@@ -583,6 +550,8 @@ $scope.modalidadesDisponibles=["Presencial","Virtual","Mixto"];
 <p class="text-sm mt-2">Desarrollado por la Coordinación de Programas Académicos</p>
 
 </footer>
+
+<iframe name="hiddenFrame" style="display:none;"></iframe>
 
 </body>
 </html>
