@@ -188,49 +188,26 @@ Exportar a Excel
 </div>
 
 <div class="max-w-6xl mx-auto mt-6 bg-white p-4 shadow rounded">
-<div class="overflow-x-auto">
-
-<table class="w-full border table-auto">
-
-<thead class="bg-gray-200">
-<tr>
-<th>Identificador</th>
-<th>CRN</th>
-<th>Clave</th>
-<th>Materia</th>
-<th>Departamento</th>
-<th>Carga</th>
-<th>Programa</th>
-<th>Semestre</th>
-<th>Cupos</th>
-<th>Modalidad</th>
-<th>Categoría</th>
-</tr>
-</thead>
-
-<tbody>
-
-<tr ng-repeat="r in registros" class="border-t text-center">
-
-<td>{{r.IDENTIFICADOR}}</td>
-<td>{{r.CRN}}</td>
-<td>{{r.CLAVE}}</td>
-<td>{{r.MATERIA}}</td>
-<td>{{r.DEPARTAMENTO}}</td>
-<td>{{r.CARGA}}</td>
-<td>{{r.PROGRAMA}}</td>
-<td>{{r.SEMESTRE}}</td>
-<td>{{r.CUPOS}}</td>
-<td>{{r.MODALIDAD}}</td>
-<td>{{r.CATEGORIA}}</td>
-
-</tr>
-
-</tbody>
-
-</table>
-
-</div>
+  <div class="overflow-x-auto">
+    <table class="w-full border table-auto">
+      <thead class="bg-gray-200 sticky top-0 z-10">
+        <tr>
+          <!-- Encabezados dinámicos -->
+          <th ng-repeat="col in columnas" class="px-3 py-2 text-left text-gray-700 font-semibold">
+            {{col}}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr ng-repeat="r in registros" class="odd:bg-white even:bg-gray-50 border-t border-gray-200">
+          <!-- Celdas dinámicas según el array de columnas -->
+          <td ng-repeat="col in columnas" class="px-3 py-1 text-center">
+            {{ r[col] }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <script>
@@ -353,7 +330,10 @@ $scope.registrar = function() {
         }
     }
 
-    // Generar registros en el arreglo local
+    // NUEVO: Creamos un arreglo temporal solo para los nuevos registros
+    let nuevosRegistros = [];
+
+    // Generar registros
     crnsSeleccionados.forEach((crn, index) => {
         let identificador = (index + 1) + "-" + $scope.form.PROGRAMA;
 
@@ -378,45 +358,53 @@ $scope.registrar = function() {
             registroBase.LAB_DIAS = "-";
             registroBase.TIPO_LABORATORIO = "-";
             registroBase.COMENTARIOS = "-";
-            $scope.registros.push(registroBase);
+            
+            $scope.registros.push(registroBase); // Lo mostramos en la tabla
+            nuevosRegistros.push(registroBase);  // Lo guardamos para enviar a Drive
         } else {
             registroBase.DIAS = JSON.parse(JSON.stringify($scope.form.DIAS));
             registroBase.HORARIOS = JSON.parse(JSON.stringify($scope.form.HORARIOS));
+            registroBase.LAB_DIAS = $scope.form.LAB_DIAS || "-";
             registroBase.TIPO_LABORATORIO = $scope.form.TIPO_LABORATORIO || "-";
             registroBase.COMENTARIOS = $scope.form.COMENTARIOS || "-";
 
             let teoria = JSON.parse(JSON.stringify(registroBase));
             teoria.CATEGORIA = "Teoría";
-            $scope.registros.push(teoria);
+            $scope.registros.push(teoria); // A la tabla
+            nuevosRegistros.push(teoria);  // A Drive
 
             let practica = JSON.parse(JSON.stringify(registroBase));
             practica.CATEGORIA = "Práctica";
-            $scope.registros.push(practica);
+            $scope.registros.push(practica); // A la tabla
+            nuevosRegistros.push(practica);  // A Drive
         }
     });
 
     $scope.mostrarAlerta("Registros agregados correctamente", "success");
     $scope.cancelar(); // Limpiar formulario
 
-    // Llamar al método que envía los registros a Google Sheets
-    $scope.enviarASheetsForm();
+    // Llamar al método que envía a Google Sheets, pasándole SOLO los nuevos
+    $scope.enviarASheetsForm(nuevosRegistros);
 };
 
-$scope.enviarASheetsForm = function() {
-    // Prepara los datos para enviar
-    let datosParaEnviar = $scope.registros.map(r => ({
+// NUEVO: Ahora recibe el parámetro "nuevosRegistros"
+$scope.enviarASheetsForm = function(nuevosRegistros) {
+    
+    // Prepara SOLO los datos nuevos para enviar
+    let datosParaEnviar = nuevosRegistros.map(r => ({
         ...r,
         DIAS: Object.keys(r.DIAS || {}).filter(d => r.DIAS[d]),
         HORARIOS: Object.keys(r.HORARIOS || {}).filter(h => r.HORARIOS[h])
     }));
+    
     // Convertimos todo a JSON string
     let jsonData = JSON.stringify(datosParaEnviar);
+    
     // Creamos un formulario invisible
     let form = document.createElement("form");
     form.method = "POST";
-    form.action = "https://script.google.com/macros/s/AKfycbylQFlxg16OIzWpfkb_gDCa6wqL9sunEOsAuq-I2-BZ_m88NT9Wved7ZhWJvyggv-N4kA/exec";
-    form.target = "hiddenFrame"; // importante
-    // form.target = "_blank"; // opcional: abrir en nueva pestaña PARA PRUEBAS
+    form.action = "https://script.google.com/macros/s/AKfycbxj2-Oqs4NZtd-NOIFS-K80ML_AIxRaPGOZnm0QZE2FnwiCq3juUzLJaOEPA3w0Wyghyg/exec";
+    form.target = "hiddenFrame";
 
     // Input hidden con los datos
     let input = document.createElement("input");
@@ -447,31 +435,47 @@ $scope.mostrarAlerta("Tabla limpiada","success");
 };
 
 $scope.exportarExcel = function() {
+    if ($scope.registros.length === 0) {
+        $scope.mostrarAlerta("No hay registros para exportar", "error");
+        return;
+    }
 
-    let datos = $scope.registros.map(r => ({
-        Identificador: r.IDENTIFICADOR,
-        CRN: r.CRN,
-        Clave: r.CLAVE,
-        Materia: r.MATERIA,
-        Departamento: r.DEPARTAMENTO,
-        Carga: r.CARGA,
-        Programa: r.PROGRAMA,
-        Semestre: r.SEMESTRE,
-        Cupos: r.CUPOS,
-        Modalidad: r.MODALIDAD,
-        Categoria: r.CATEGORIA,
-        Dias: Object.keys(r.DIAS).filter(d => r.DIAS[d]).join(", "),
-        Horarios: Object.keys(r.HORARIOS).filter(h => r.HORARIOS[h]).join(", "),
-        Tipo_Laboratorio: r.TIPO_LABORATORIO || "",
-        Comentarios: r.COMENTARIOS || "",
-        Fecha_Registro: r.FECHA_REGISTRO || ""
-    }));
+    // Tomar todas las columnas dinámicamente de la primera fila
+    let todasColumnas = Object.keys($scope.registros[0]).filter(col => !col.startsWith("$$"));
 
+    let datos = $scope.registros.map(r => {
+        let fila = {};
+        todasColumnas.forEach(col => {
+            let valor = r[col];
+
+            // Convertir objetos como DIAS u HORARIOS en string legible
+            if (typeof valor === "object" && valor !== null) {
+                valor = Object.keys(valor).filter(k => valor[k]).join(", ");
+            }
+
+            // Convertir FECHA_REGISTRO a formato local legible
+            if (col === "Fecha_Registro" && valor) {
+                let d = new Date(valor);
+                let pad = n => n.toString().padStart(2, '0');
+                valor = `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ` +
+                        `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+            }
+
+            fila[col] = valor;
+        });
+
+        return fila;
+    });
+
+    // Crear hoja y libro
     let ws = XLSX.utils.json_to_sheet(datos);
     let wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Secciones");
 
+    // Guardar archivo
     XLSX.writeFile(wb, "plantilla_secciones_2026B.xlsx");
+
+    $scope.mostrarAlerta("Excel exportado correctamente", "success");
 };
 
 $scope.mostrarAlerta=function(mensaje,tipo){
@@ -532,7 +536,44 @@ $scope.cambiarModalidad();
 };
 
 
+/* Modalidades disponibles */
 $scope.modalidadesDisponibles=["Presencial","Virtual","Mixto"];
+
+
+/* Definir que columnas mostrar en la interfaz */
+$scope.columnas = [
+  "IDENTIFICADOR",
+  "CRN",
+  "CLAVE",
+  "MATERIA",
+  "CARGA",
+  "PROGRAMA",
+  "SEMESTRE",
+  "CUPOS",
+  "MODALIDAD",
+  "CATEGORIA"
+];
+
+/*cargarRegistros desde Hoja de Calculo*/
+/*cargarRegistros desde Hoja de Calculo*/
+$scope.cargarRegistros = function() {
+  const url = "https://script.google.com/macros/s/AKfycbwR2ElNvxZrgK7V5H6G9vNZ1_hDLf9KB8tQhdthnZENkYQzdWgtQt40BiykMGkXcq33tQ/exec";
+
+  fetch(url)
+    .then(response => response.json())
+    .then(data => {
+      $scope.$apply(function() {
+        $scope.registros = data;
+        // Ya no tocamos $scope.columnas, así mantenemos solo las columnas que quieres
+      });
+    })
+    .catch(error => {
+      console.error("Error cargando datos:", error);
+    });
+};
+
+/* Mandar llamar la carga de datos a la tabla */
+$scope.cargarRegistros();
 
 });
 
