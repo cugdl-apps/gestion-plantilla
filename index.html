@@ -460,9 +460,11 @@
                 $scope.cancelar();
             };
 
+            // --- FUNCIÓN PARA GUARDAR (POST) ---
             $scope.enviarASheets = function (data) {
-                // AQUÍ VA EL URL DEL NUEVO MACRO/APPS SCRIPT DE TU HOJA 
-                let url = "https://script.google.com/macros/s/AKfycby-GT92fdl-yvmchiJI4a0AvSnJptz3QJVZrlX0RjHp7rh4VF_G4h8orwQQnoqtqjFdoA/exec";
+                // Pega aquí tu enlace que termina en ...JjYw/exec
+                let url = "https://script.google.com/macros/s/AKfycbwsitpXthb19iXSTA29bSbYSaGrelxO8pDoyyP0c_LPKGDhZJYuBeKwt3-pWuhfMJJjYw/exec"; 
+                
                 let form = document.createElement("form");
                 form.method = "POST";
                 form.action = url;
@@ -612,19 +614,29 @@
                 }, 100); 
             };
 
+            // --- FUNCIÓN PARA LEER (GET) ---
             $scope.cargarRegistros = function () {
-                // AQUÍ VA EL URL DEL NUEVO MACRO/APPS SCRIPT DE TU HOJA 
-                const url = "918717903490-c11rpq9l7g8hq9phln457no1j379bsf5.apps.googleusercontent.com";
+                // Pega aquí tu enlace que termina en ...cw/exec
+                const url = "https://script.google.com/macros/s/AKfycbxEpCwBYIeFOpcz0AOriqZQ0kmOB0XjFLbDSIDxlMuCo1hy9_6gQeSg7uJ4BhpR-sCuLg/exec"; 
+                
                 fetch(url)
                     .then(r => r.json())
                     .then(data => {
+                        // Agregamos una validación por si Apps Script devuelve un error visible
+                        if (data.error) {
+                            console.error("Error desde Apps Script:", data.error);
+                            return;
+                        }
                         $scope.$apply(() => {
                             $scope.registros = data;
                             $scope.actualizarPaginacion(); 
                             $scope.procesarResumen(); 
                         });
                     })
-                    .catch(err => console.log(err));
+                    .catch(err => {
+                        console.error("Fallo al descargar los datos:", err);
+                        $scope.mostrarAlerta("Error al cargar los registros históricos.", "error");
+                    });
             };
 
         });
