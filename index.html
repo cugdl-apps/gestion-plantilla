@@ -1,34 +1,633 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" ng-app="appMaterias">
+
 <head>
     <meta charset="UTF-8">
-    <title>PA 2026B</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Módulo de Gestión de Secciones para Orientaciones</title>
 
-        .mensaje {
-            font-size: 2rem;
-            color: #333;
-            background: white;
-            padding: 20px 40px;
-            border-radius: 10px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.2/angular.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jwt-decode/build/jwt-decode.min.js"></script>
+    
+    <style>
+        [ng\:cloak], [ng-cloak], [data-ng-cloak], [x-ng-cloak], .ng-cloak, .x-ng-cloak {
+            display: none !important;
         }
     </style>
 </head>
-<body>
 
-<div class="mensaje">
-    Trabajando...
-</div>
+<body class="bg-gray-100" ng-controller="MainController">
 
+    <div ng-show="!usuarioAutenticado" class="min-h-screen flex items-center justify-center bg-gray-200">
+        <div class="bg-white p-10 rounded-lg shadow-xl text-center max-w-md w-full">
+            <div class="flex justify-center gap-4 mb-6">
+                <img src="UDG.png" class="h-16" alt="UDG">
+                <img src="CUGDL.png" class="h-16" alt="CUGDL">
+            </div>
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">Acceso Restringido</h2>
+            <p class="text-gray-600 mb-8">Inicia sesión con tu correo institucional para acceder al Módulo de Gestión de Secciones para Orientaciones.</p>
+            
+            <div id="googleButtonDiv" class="flex justify-center"></div>
+            
+            <div ng-if="errorLogin" class="mt-4 p-3 bg-red-100 text-red-700 rounded text-sm font-semibold">
+                {{errorLogin}}
+            </div>
+        </div>
+    </div>
+
+    <div ng-show="usuarioAutenticado" ng-cloak>
+        
+        <header class="bg-white shadow-md mb-6">
+            <div class="max-w-6xl mx-auto flex items-center justify-between p-4">
+                <div class="flex items-center gap-4">
+                    <img src="CUGDL.png" class="h-14" alt="CUGDL">
+                    <div>
+                        <h1 class="text-xl font-bold text-gray-800">Centro Universitario de Guadalajara</h1>
+                        <p class="text-gray-600">Módulo de Gestión de Secciones para Orientaciones</p>
+                    </div>
+                </div>
+                <div class="text-right text-sm bg-blue-50 p-2 rounded border border-blue-100 hidden md:block">
+                    <p class="text-gray-500">Sesión activa:</p>
+                    <p class="font-bold text-blue-700">{{correoUsuario}}</p>
+                </div>
+            </div>
+        </header>
+
+        <div class="max-w-6xl mx-auto bg-white p-6 rounded-lg shadow-lg">
+
+            <div ng-if="alerta"
+                class="p-3 mb-4 rounded text-white font-semibold"
+                ng-class="{'bg-red-500': alerta.tipo=='error','bg-green-500': alerta.tipo=='success'}">
+                {{alerta.mensaje}}
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-4">
+                <div>
+                    <label class="font-semibold">Clave Materia</label>
+                    <input type="text" ng-model="form.CLAVE" ng-change="buscarMateria()" class="w-full border rounded p-2 uppercase">
+                </div>
+                <div>
+                    <label class="font-semibold">Materia</label>
+                    <input type="text" ng-model="form.MATERIA" readonly class="w-full border rounded p-2 bg-gray-100">
+                </div>
+                <div>
+                    <label class="font-semibold">Departamento</label>
+                    <input type="text" ng-model="form.DEPARTAMENTO" readonly class="w-full border rounded p-2 bg-gray-100">
+                </div>
+                <div>
+                    <label class="font-semibold">Carga Horaria Semanal</label>
+                    <input type="text" ng-model="form.CARGA" readonly class="w-full border rounded p-2 bg-gray-100">
+                </div>
+
+                <div class="md:col-span-2 mt-2">
+                    <label class="font-semibold block mb-2">Programa Educativo</label>
+                    <div class="flex flex-wrap gap-4 bg-gray-50 p-3 border rounded">
+                        <label ng-repeat="p in programasPermitidos" class="cursor-pointer flex items-center gap-2">
+                            <input type="radio" ng-model="form.PROGRAMA" ng-value="p" class="w-4 h-4 text-blue-600">
+                            <span class="font-medium">{{p}}</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="font-semibold">Semestre</label>
+                    <select ng-model="form.SEMESTRE" class="w-full border rounded p-2">
+                        <option value="">Seleccionar</option>
+                        <option ng-repeat="s in semestres">{{s}}</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold">Cantidad de Secciones</label>
+                    <select ng-model="form.SECCIONES" class="w-full border rounded p-2">
+                        <option value="">Seleccionar</option>
+                        <option ng-repeat="n in secciones">{{n}}</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold">Cupos</label>
+                    <select ng-model="form.CUPOS" class="w-full border rounded p-2">
+                        <option value="">Seleccionar</option>
+                        <option ng-repeat="c in cupos">{{c}}</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold">Modalidad del Curso</label>
+                    <select ng-model="form.MODALIDAD" class="w-full border rounded p-2">
+                        <option value="">Seleccionar</option>
+                        <option value="Presencial">Presencial</option>
+                        <option value="Mixto">Mixto</option>
+                    </select>
+                </div>
+
+                <div class="md:col-span-2 mt-2">
+                    <label class="font-semibold block mb-2">Días</label>
+                    <div class="flex flex-wrap gap-4 bg-gray-50 p-3 border rounded">
+                        <label ng-repeat="dia in opcionesDias" class="cursor-pointer flex items-center gap-2">
+                            <input type="checkbox" ng-model="form.DIAS[dia]" class="w-4 h-4 text-blue-600">
+                            <span class="font-medium">{{dia}}</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="md:col-span-2 mt-2">
+                    <label class="font-semibold block mb-2">Horarios</label>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-gray-50 p-3 border rounded">
+                        <label ng-repeat="hr in opcionesHorarios" class="cursor-pointer flex items-center gap-2">
+                            <input type="checkbox" ng-model="form.HORARIOS[hr]" class="w-4 h-4 text-blue-600">
+                            <span class="font-medium">{{hr}}</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="font-semibold">Laboratorios</label>
+                    <select ng-model="form.LABORATORIOS" class="w-full border rounded p-2">
+                        <option value="No">No</option>
+                        <option value="Si">Sí</option>
+                    </select>
+                </div>
+
+                <div ng-show="form.LABORATORIOS == 'Si'" class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="font-semibold">Cantidad de Días</label>
+                        <select ng-model="form.CANTIDAD_DIAS_LABS" class="w-full border rounded p-2">
+                            <option value="">Seleccionar</option>
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="font-semibold">Tipo</label>
+                        <select ng-model="form.TIPO" class="w-full border rounded p-2">
+                            <option value="">Seleccionar</option>
+                            <option value="PC Windows">PC Windows</option>
+                            <option value="MAC">MAC</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="md:col-span-2 mt-2">
+                    <label class="font-semibold">Comentarios</label>
+                    <textarea ng-model="form.COMENTARIOS" class="w-full border rounded p-2" rows="2" placeholder="Opcional..."></textarea>
+                </div>
+            </div>
+
+            <div class="mt-6 flex flex-wrap gap-4">
+                <button ng-click="registrar()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded">Registrar Secciones</button>
+                <button ng-click="cancelar()" class="bg-yellow-500 hover:bg-yellow-600 text-white font-semibold px-6 py-2 rounded">Limpiar Formulario</button>
+                <button ng-click="exportarExcel()" class="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-2 rounded">Exportar a Excel</button>
+            </div>
+        </div>
+
+        <div class="max-w-6xl mx-auto mt-6 bg-white p-4 shadow rounded">
+
+            <div class="flex justify-center mb-6 space-x-2 bg-gray-100 p-1 rounded-lg w-fit mx-auto border border-gray-200">
+                <button ng-click="vistaActiva = 'resumen'" 
+                        ng-class="vistaActiva == 'resumen' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:bg-gray-200'" 
+                        class="px-6 py-2 rounded-md font-semibold transition-all">
+                    Resumen y Gráficos
+                </button>
+                <button ng-click="vistaActiva = 'tabla'" 
+                        ng-class="vistaActiva == 'tabla' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:bg-gray-200'" 
+                        class="px-6 py-2 rounded-md font-semibold transition-all">
+                    Ver Registros ({{registros.length}})
+                </button>
+            </div>
+
+            <div ng-show="vistaActiva == 'resumen'">
+                <div class="grid md:grid-cols-3 gap-6">
+                    <div class="md:col-span-1 overflow-x-auto">
+                        <h2 class="font-bold text-gray-700 mb-2 text-center">Datos por Programa</h2>
+                        <table class="w-full border table-auto text-sm text-center">
+                            <thead class="bg-blue-50">
+                                <tr>
+                                    <th class="px-3 py-2 border font-semibold">Programa</th>
+                                    <th class="px-3 py-2 border font-semibold">Secciones (Teoría + Práctica)</th>
+                                    <th class="px-3 py-2 border font-semibold">Total Cupos</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr ng-repeat="item in resumenDatos" class="border-t odd:bg-white even:bg-gray-50">
+                                    <td class="px-3 py-2 font-bold text-blue-700">{{item.programa}}</td>
+                                    <td class="px-3 py-2">{{item.secciones}}</td>
+                                    <td class="px-3 py-2">{{item.cupos}}</td>
+                                </tr>
+                                <tr class="bg-gray-200 font-bold border-t">
+                                    <td class="px-3 py-2">TOTAL</td>
+                                    <td class="px-3 py-2">{{totalSeccionesResumen}}</td>
+                                    <td class="px-3 py-2">{{totalCuposResumen}}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="md:col-span-1"><canvas id="chartSecciones"></canvas></div>
+                    <div class="md:col-span-1"><canvas id="chartCupos"></canvas></div>
+                </div>
+            </div>
+
+            <div ng-show="vistaActiva == 'tabla'" class="overflow-x-auto flex flex-col h-full">
+                <div class="mb-2 text-sm text-gray-500 italic text-center">
+                    Mostrando página {{paginaActual}} de {{totalPaginas || 1}} ({{registros.length}} registros totales).
+                </div>
+                
+                <table class="w-full border table-auto text-sm">
+                    <thead class="bg-gray-200 sticky top-0">
+                        <tr>
+                            <th ng-repeat="col in columnas" class="px-3 py-2 text-left font-semibold">{{col}}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr ng-repeat="r in registros | limitTo: registrosPorPagina : (paginaActual - 1) * registrosPorPagina" class="odd:bg-white even:bg-gray-50 border-t">
+                            <td ng-repeat="col in columnas" class="px-3 py-2">{{r[col]}}</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="flex justify-between items-center mt-4 bg-gray-50 p-2 rounded border">
+                    <button ng-click="paginaAnterior()" ng-disabled="paginaActual == 1" class="px-4 py-2 bg-white border rounded text-blue-600 font-semibold hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">&laquo; Anterior</button>
+                    <span class="font-semibold text-gray-700">Página {{paginaActual}} de {{totalPaginas || 1}}</span>
+                    <button ng-click="paginaSiguiente()" ng-disabled="paginaActual >= totalPaginas" class="px-4 py-2 bg-white border rounded text-blue-600 font-semibold hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">Siguiente &raquo;</button>
+                </div>
+            </div>
+
+        </div>
+
+        <footer class="text-center mt-10 p-6 text-gray-600">
+            <div class="flex justify-center gap-6 mb-3">
+                <img src="UDG.png" class="h-12"><img src="CUGDL.png" class="h-12">
+            </div>
+            <p class="font-semibold">Universidad de Guadalajara</p>
+            <p>CUGDL</p>
+            <p class="text-sm mt-2">Desarrollado por la Coordinación de Programas Académicos</p>
+        </footer>
+    </div>
+
+    <iframe name="hiddenFrame" style="display:none;"></iframe>
+
+    <script>
+        var app = angular.module("appMaterias", []);
+
+        app.controller("MainController", function ($scope, $http, $timeout) {
+
+            // --- ESTADOS DE AUTENTICACIÓN ---
+            $scope.usuarioAutenticado = false;
+            $scope.correoUsuario = "";
+            $scope.errorLogin = null;
+
+            window.handleCredentialResponse = function(response) {
+                if (!response || !response.credential) return;
+
+                try {
+                    const data = jwt_decode(response.credential);
+                    const email = data.email || "";
+
+                    if(email.endsWith("@cugdl.udg.mx") || email.endsWith("@udg.mx") || email.endsWith("@alumnos.udg.mx") || email.endsWith("@gmail.com")) {
+                        $timeout(function() {
+                            $scope.usuarioAutenticado = true;
+                            $scope.correoUsuario = email;
+                            $scope.errorLogin = null;
+                            $scope.cargarRegistros();
+                        });
+                    } else {
+                        $timeout(function() {
+                            $scope.errorLogin = "Acceso denegado. Utiliza una cuenta institucional válida.";
+                        });
+                    }
+                } catch (err) {
+                    $timeout(function() {
+                        $scope.errorLogin = "Error técnico al leer tu cuenta. Intenta de nuevo.";
+                    });
+                }
+            };
+
+            window.onload = function () {
+                google.accounts.id.initialize({
+                    // ¡ASEGÚRATE DE PONER TU CLIENT ID AQUÍ DE NUEVO!
+                    client_id: "918717903490-c11rpq9l7g8hq9phln457no1j379bsf5.apps.googleusercontent.com", 
+                    callback: handleCredentialResponse
+                });
+                google.accounts.id.renderButton(
+                    document.getElementById("googleButtonDiv"),
+                    { theme: "outline", size: "large", width: 300 }
+                );
+            };
+
+
+            // --- NUEVAS VARIABLES DEL SISTEMA ---
+            $scope.programasPermitidos = ["LC", "LCD", "LIACD", "LIFN", "LTB"];
+            $scope.secciones = Array.from({ length: 20 }, (_, i) => i + 1);
+            $scope.cupos = [30, 40]; // Solamente 30 y 40
+            $scope.semestres = ["1", "2", "3", "4", "5", "6", "7", "8", "R"];
+            
+            $scope.opcionesDias = ["L", "M", "I", "J", "V", "S"];
+            $scope.opcionesHorarios = [
+                "07:00 - 09:00", "08:00 - 10:00", "09:00 - 11:00", "10:00 - 12:00", 
+                "13:00 - 15:00", "14:00 - 16:00", "15:00 - 17:00", "16:00 - 18:00", 
+                "17:00 - 19:00", "18:00 - 20:00", "19:00 - 21:00"
+            ];
+
+            $scope.form = { MODALIDAD: "", LABORATORIOS: "No", DIAS: {}, HORARIOS: {} };
+            $scope.registros = [];
+            $scope.catalogo = [];
+            
+            $scope.vistaActiva = 'resumen'; 
+            $scope.resumenDatos = [];
+
+            // Paginación
+            $scope.paginaActual = 1;
+            $scope.registrosPorPagina = 10;
+            $scope.totalPaginas = 1;
+
+            var chartSec = null;
+            var chartCup = null;
+
+            $scope.columnas = [
+                "IDENTIFICADOR", "CLAVE", "MATERIA", "PROGRAMA", "SEMESTRE", "CUPOS", "MODALIDAD", "CATEGORIA"
+            ];
+
+            // Carga Catálogo (Asegúrate de tener tu JSON con la información correcta)
+            $http.get("catalogo.json").then(function (res) {
+                $scope.catalogo = res.data;
+            });
+
+            // --- FUNCIONES DEL FORMULARIO ---
+            $scope.buscarMateria = function () {
+                let clave = ($scope.form.CLAVE || "").toUpperCase();
+                let materia = $scope.catalogo.find(m => m.CLAVE === clave);
+
+                if (materia) {
+                    $scope.form.MATERIA = materia.MATERIA;
+                    $scope.form.DEPARTAMENTO = materia.DEPARTAMENTO;
+                    $scope.form.CARGA = materia["CARGA HORARIA SEMANAL"];
+                } else {
+                    $scope.form.MATERIA = "";
+                    $scope.form.DEPARTAMENTO = "";
+                    $scope.form.CARGA = "";
+                }
+            };
+
+            $scope.registrar = function () {
+                // Validación general
+                if (!$scope.form.CLAVE || !$scope.form.PROGRAMA || !$scope.form.SECCIONES || !$scope.form.CUPOS || !$scope.form.MODALIDAD) {
+                    $scope.mostrarAlerta("Complete todos los campos obligatorios", "error");
+                    return;
+                }
+
+                // Validación de Checklists (Días y Horarios)
+                let diasSeleccionados = Object.keys($scope.form.DIAS).filter(k => $scope.form.DIAS[k]);
+                let horariosSeleccionados = Object.keys($scope.form.HORARIOS).filter(k => $scope.form.HORARIOS[k]);
+
+                if(diasSeleccionados.length === 0) {
+                    $scope.mostrarAlerta("Debe seleccionar al menos un día", "error");
+                    return;
+                }
+                if(horariosSeleccionados.length === 0) {
+                    $scope.mostrarAlerta("Debe seleccionar al menos un horario", "error");
+                    return;
+                }
+
+                // Validación Laboratorios
+                if ($scope.form.LABORATORIOS === 'Si' && (!$scope.form.CANTIDAD_DIAS_LABS || !$scope.form.TIPO)) {
+                    $scope.mostrarAlerta("Complete la información de los laboratorios (Días y Tipo)", "error");
+                    return;
+                }
+
+                let diasStr = diasSeleccionados.join(", ");
+                let horariosStr = horariosSeleccionados.join(", ");
+
+                // Valores Default en caso de No tener Laboratorios
+                let labCantidad = $scope.form.LABORATORIOS === 'Si' ? $scope.form.CANTIDAD_DIAS_LABS : 0;
+                let labTipo = $scope.form.LABORATORIOS === 'Si' ? $scope.form.TIPO : 0;
+
+                let secciones = parseInt($scope.form.SECCIONES);
+                let maxId = 0;
+
+                $scope.registros.forEach(r => {
+                    if (!r.IDENTIFICADOR) return;
+                    if (r.IDENTIFICADOR.startsWith($scope.form.PROGRAMA)) {
+                        let numeroStr = r.IDENTIFICADOR.replace($scope.form.PROGRAMA, "");
+                        let numero = parseInt(numeroStr, 10);
+                        if (!isNaN(numero)) { maxId = Math.max(maxId, numero); }
+                    }
+                });
+
+                let nuevos = [];
+
+                for (let i = 0; i < secciones; i++) {
+                    maxId++;
+                    let baseRegistro = {
+                        IDENTIFICADOR: $scope.form.PROGRAMA + maxId,
+                        CLAVE: ($scope.form.CLAVE || "").toUpperCase(),
+                        MATERIA: $scope.form.MATERIA,
+                        DEPARTAMENTO: $scope.form.DEPARTAMENTO,
+                        CARGA: $scope.form.CARGA,
+                        PROGRAMA: $scope.form.PROGRAMA,
+                        SEMESTRE: $scope.form.SEMESTRE,
+                        CUPOS: $scope.form.CUPOS,
+                        MODALIDAD: $scope.form.MODALIDAD,
+                        DIAS: diasStr,
+                        HORARIOS: horariosStr,
+                        LABORATORIOS: $scope.form.LABORATORIOS,
+                        CANTIDAD_DIAS_LABS: labCantidad,
+                        TIPO: labTipo,
+                        COMENTARIOS: $scope.form.COMENTARIOS || "-",
+                        FECHA_REGISTRO: new Date().toLocaleString(),
+                        REGISTRADO_POR: $scope.correoUsuario
+                    };
+
+                    // Doble registro obligatorio
+                    let regTeoria = angular.copy(baseRegistro);
+                    regTeoria.CATEGORIA = "TEORIA";
+                    
+                    let regPractica = angular.copy(baseRegistro);
+                    regPractica.CATEGORIA = "PRACTICA";
+
+                    $scope.registros.push(regTeoria, regPractica);
+                    nuevos.push(regTeoria, regPractica);
+                }
+
+                $scope.enviarASheets(nuevos);
+                $scope.mostrarAlerta("Secciones de Teoría y Práctica registradas correctamente", "success");
+                
+                $scope.procesarResumen();
+                $scope.actualizarPaginacion();
+                $scope.paginaActual = $scope.totalPaginas;
+
+                $scope.cancelar();
+            };
+
+            $scope.enviarASheets = function (data) {
+                // AQUÍ VA EL URL DEL NUEVO MACRO/APPS SCRIPT DE TU HOJA 
+                let url = "https://script.google.com/macros/s/AKfycby-GT92fdl-yvmchiJI4a0AvSnJptz3QJVZrlX0RjHp7rh4VF_G4h8orwQQnoqtqjFdoA/exec";
+                let form = document.createElement("form");
+                form.method = "POST";
+                form.action = url;
+                form.target = "hiddenFrame";
+                
+                let input = document.createElement("input");
+                input.type = "hidden";
+                input.name = "data";
+                input.value = JSON.stringify(data);
+                
+                form.appendChild(input);
+                document.body.appendChild(form);
+                form.submit();
+                document.body.removeChild(form);
+            };
+
+            $scope.cancelar = function () {
+                let programa = $scope.form.PROGRAMA;
+                $scope.form = {
+                    PROGRAMA: programa,
+                    SEMESTRE: "", 
+                    MODALIDAD: "",
+                    LABORATORIOS: "No",
+                    DIAS: {},
+                    HORARIOS: {}
+                };
+            };
+
+            $scope.exportarExcel = function () {
+                if ($scope.registros.length === 0) {
+                    $scope.mostrarAlerta("No hay datos para exportar", "error");
+                    return;
+                }
+
+                const columnasCompletas = [
+                    "IDENTIFICADOR", "CLAVE", "MATERIA", "DEPARTAMENTO", "CARGA", 
+                    "PROGRAMA", "SEMESTRE", "CUPOS", "MODALIDAD", "CATEGORIA", 
+                    "DIAS", "HORARIOS", "LABORATORIOS", "CANTIDAD_DIAS_LABS", 
+                    "TIPO", "COMENTARIOS", "FECHA_REGISTRO", "REGISTRADO_POR"
+                ];
+
+                let datos = $scope.registros.map(r => {
+                    let fila = {};
+                    columnasCompletas.forEach(col => {
+                        let valor = r[col] || "";
+                        if (col === "FECHA_REGISTRO" && valor !== "") {
+                            let fecha = new Date(valor);
+                            if (!isNaN(fecha.getTime())) {
+                                valor = fecha.toLocaleString('es-MX', {
+                                    day: '2-digit', month: '2-digit', year: 'numeric',
+                                    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+                                });
+                            }
+                        }
+                        fila[col] = valor;
+                    });
+                    return fila;
+                });
+
+                let ws = XLSX.utils.json_to_sheet(datos);
+                let wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Secciones");
+                XLSX.writeFile(wb, "secciones_orientaciones.xlsx");
+
+                $scope.mostrarAlerta("Excel exportado correctamente", "success");
+            };
+
+            $scope.mostrarAlerta = function (msg, tipo) {
+                $scope.alerta = { mensaje: msg, tipo: tipo };
+                setTimeout(() => {
+                    $scope.$apply(() => { $scope.alerta = null; });
+                }, 3000);
+            };
+
+            // --- LÓGICA DE PAGINACIÓN Y GRÁFICOS ---
+            $scope.actualizarPaginacion = function() {
+                $scope.totalPaginas = Math.ceil($scope.registros.length / $scope.registrosPorPagina);
+                if ($scope.totalPaginas === 0) $scope.totalPaginas = 1;
+                if ($scope.paginaActual > $scope.totalPaginas) $scope.paginaActual = $scope.totalPaginas;
+            };
+
+            $scope.paginaAnterior = function() {
+                if ($scope.paginaActual > 1) { $scope.paginaActual--; }
+            };
+
+            $scope.paginaSiguiente = function() {
+                if ($scope.paginaActual < $scope.totalPaginas) { $scope.paginaActual++; }
+            };
+
+            $scope.procesarResumen = function() {
+                let agrupacion = {};
+                $scope.totalSeccionesResumen = 0;
+                $scope.totalCuposResumen = 0;
+                
+                $scope.programasPermitidos.forEach(p => {
+                    agrupacion[p] = { programa: p, secciones: 0, cupos: 0 };
+                });
+                
+                $scope.registros.forEach(r => {
+                    let p = r.PROGRAMA;
+                    if (p && agrupacion[p]) {
+                        agrupacion[p].secciones++;
+                        let c = parseInt(r.CUPOS) || 0;
+                        agrupacion[p].cupos += c;
+                        $scope.totalSeccionesResumen++;
+                        $scope.totalCuposResumen += c;
+                    }
+                });
+                
+                $scope.resumenDatos = Object.values(agrupacion);
+                $scope.dibujarGraficos();
+            };
+
+            $scope.dibujarGraficos = function() {
+                $timeout(function() {
+                    let labels = $scope.resumenDatos.map(d => d.programa);
+                    let dataSecciones = $scope.resumenDatos.map(d => d.secciones);
+                    let dataCupos = $scope.resumenDatos.map(d => d.cupos);
+                    let coloresDona = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'];
+
+                    if(chartSec) chartSec.destroy();
+                    if(chartCup) chartCup.destroy();
+
+                    let ctxSec = document.getElementById('chartSecciones');
+                    if(ctxSec) {
+                        chartSec = new Chart(ctxSec.getContext('2d'), {
+                            type: 'bar',
+                            data: {
+                                labels: labels,
+                                datasets: [{ label: 'Registros', data: dataSecciones, backgroundColor: '#3b82f6', borderRadius: 4 }]
+                            },
+                            options: { responsive: true, plugins: { title: { display: true, text: 'Total Registros por Programa' } } }
+                        });
+                    }
+
+                    let ctxCup = document.getElementById('chartCupos');
+                    if(ctxCup) {
+                        chartCup = new Chart(ctxCup.getContext('2d'), {
+                            type: 'doughnut',
+                            data: {
+                                labels: labels,
+                                datasets: [{ data: dataCupos, backgroundColor: coloresDona, borderWidth: 0 }]
+                            },
+                            options: { responsive: true, plugins: { title: { display: true, text: 'Proporción de Cupos Globales' } } }
+                        });
+                    }
+                }, 100); 
+            };
+
+            $scope.cargarRegistros = function () {
+                // AQUÍ VA EL URL DEL NUEVO MACRO/APPS SCRIPT DE TU HOJA 
+                const url = "918717903490-c11rpq9l7g8hq9phln457no1j379bsf5.apps.googleusercontent.com";
+                fetch(url)
+                    .then(r => r.json())
+                    .then(data => {
+                        $scope.$apply(() => {
+                            $scope.registros = data;
+                            $scope.actualizarPaginacion(); 
+                            $scope.procesarResumen(); 
+                        });
+                    })
+                    .catch(err => console.log(err));
+            };
+
+        });
+    </script>
 </body>
 </html>
